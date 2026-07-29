@@ -1,0 +1,48 @@
+name: Sync PR contributor tracking branch
+
+on:
+  schedule:
+    # Daily at 10:17 Asia/Shanghai (02:17 UTC).
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-pr-contributor-tracking
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out tracking branch
+        uses: actions/checkout@v4
+        with:
+          ref: contributor-tracking
+          fetch-depth: 0
+
+      - name: Fast-forward from CloudlessMoon/master
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git remote add contributor https://github.com/CloudlessMoon/QMUI_iOS.git
+          git fetch --no-tags contributor master
+
+          current_sha="$(git rev-parse HEAD)"
+          contributor_sha="$(git rev-parse contributor/master)"
+
+          if [[ "$current_sha" == "$contributor_sha" ]]; then
+            echo "contributor-tracking is already current."
+            exit 0
+          fi
+
+          if ! git merge-base --is-ancestor "$current_sha" "$contributor_sha"; then
+            echo "contributor-tracking has diverged; refusing to overwrite it."
+            exit 1
+          fi
+
+          git merge --ff-only "$contributor_sha"
+          git push origin HEAD:contributor-tracking
